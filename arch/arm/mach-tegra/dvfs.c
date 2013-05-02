@@ -553,6 +553,11 @@ int tegra_dvfs_override_core_voltage(int override_mv)
 
 	mutex_lock(&rail_override_lock);
 
+	if (override_mv == rail->override_millivolts) {
+		ret = 0;
+		goto out;
+	}
+
 	if (override_mv) {
 		ret = tegra_dvfs_core_cap_level_apply(override_mv);
 		if (ret) {
