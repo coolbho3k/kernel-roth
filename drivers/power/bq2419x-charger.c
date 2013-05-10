@@ -42,6 +42,8 @@
 #include <linux/rtc.h>
 #include <linux/alarmtimer.h>
 
+#define BQ2419x_OTG_ENABLE_TIME	30*HZ
+
 /* input current limit */
 static const unsigned int iinlim[] = {
 	100, 150, 500, 900, 1200, 1500, 2000, 3000,
@@ -69,6 +71,7 @@ struct bq2419x_chip {
 	struct power_supply		ac;
 	struct power_supply		usb;
 	struct mutex			mutex;
+	struct mutex			otg_mutex;
 	int				ac_online;
 	int				usb_online;
 	int				in_current_limit;
@@ -90,10 +93,12 @@ struct bq2419x_chip {
 	struct task_struct		*bq_kworker_task;
 	struct kthread_work		bq_wdt_work;
 	struct rtc_device		*rtc;
+	struct delayed_work		otg_reset_work;
 	int				stop_thread;
 	int				suspended;
 	int				chg_restart_timeout;
 	int				chg_restart_time;
+	int				is_otg_connected;
 };
 
 static enum power_supply_property bq2419x_psy_props[] = {
@@ -142,10 +147,13 @@ static int bq2419x_vbus_enable(struct regulator_dev *rdev)
 
 	dev_info(bq2419x->dev, "VBUS enabled, charging disabled\n");
 
+	mutex_lock(&bq2419x->otg_mutex);
+	bq2419x->is_otg_connected = true;
 	ret = regmap_update_bits(bq2419x->regmap, BQ2419X_PWR_ON_REG,
 			BQ2419X_ENABLE_CHARGE_MASK, BQ2419X_ENABLE_VBUS);
 	if (ret < 0)
 		dev_err(bq2419x->dev, "PWR_ON_REG update failed %d", ret);
+	mutex_unlock(&bq2419x->otg_mutex);
 
 	return ret;
 }
@@ -156,11 +164,13 @@ static int bq2419x_vbus_disable(struct regulator_dev *rdev)
 	int ret;
 
 	dev_info(bq2419x->dev, "VBUS disabled, charging enabled\n");
+
+	mutex_lock(&bq2419x->otg_mutex);
+	bq2419x->is_otg_connected = false;
 	ret = bq2419x_charger_enable(bq2419x);
-	if (ret < 0) {
+	if (ret < 0)
 		dev_err(bq2419x->dev, "Charger enable failed %d", ret);
-		return ret;
-	}
+	mutex_unlock(&bq2419x->otg_mutex);
 
 	return ret;
 }
@@ -211,6 +221,27 @@ static int bq2419x_usb_get_property(struct power_supply *psy,
 	else
 		return -EINVAL;
 	return 0;
+}
+
+static void bq2419x_otg_reset_work_handler(struct work_struct *work)
+{
+	int ret;
+	struct bq2419x_chip *bq2419x = container_of(to_delayed_work(work),
+			struct bq2419x_chip, otg_reset_work);
+
+	if (!mutex_is_locked(&bq2419x->otg_mutex)) {
+		mutex_lock(&bq2419x->otg_mutex);
+		if (bq2419x->is_otg_connected) {
+			ret = regmap_update_bits(bq2419x->regmap,
+					BQ2419X_PWR_ON_REG,
+					BQ2419X_ENABLE_CHARGE_MASK,
+					BQ2419X_ENABLE_VBUS);
+			if (ret < 0)
+				dev_err(bq2419x->dev,
+				"PWR_ON_REG update failed %d", ret);
+		}
+		mutex_unlock(&bq2419x->otg_mutex);
+	}
 }
 
 static int bq2419x_init(struct bq2419x_chip *bq2419x)
@@ -590,8 +621,21 @@ static irqreturn_t bq2419x_irq(int irq, void *data)
 		}
 	}
 
-	if (val & BQ2419x_FAULT_BOOST_FAULT)
+	if (val & BQ2419x_FAULT_BOOST_FAULT) {
 		dev_err(bq2419x->dev, "Charging Fault: VBUS Overloaded\n");
+		mutex_lock(&bq2419x->otg_mutex);
+		if (bq2419x->is_otg_connected) {
+			ret = bq2419x_charger_enable(bq2419x);
+			if (ret < 0) {
+				dev_err(bq2419x->dev,
+					"Charger enable failed %d", ret);
+				return ret;
+			}
+			schedule_delayed_work(&bq2419x->otg_reset_work,
+					BQ2419x_OTG_ENABLE_TIME);
+		}
+		mutex_unlock(&bq2419x->otg_mutex);
+	}
 
 	switch (val & BQ2419x_FAULT_CHRG_FAULT_MASK) {
 	case BQ2419x_FAULT_CHRG_INPUT:
@@ -601,6 +645,18 @@ static irqreturn_t bq2419x_irq(int irq, void *data)
 	case BQ2419x_FAULT_CHRG_THERMAL:
 		dev_err(bq2419x->dev, "Charging Fault: Thermal shutdown\n");
 		check_chg_state = 1;
+		mutex_lock(&bq2419x->otg_mutex);
+		if (bq2419x->is_otg_connected) {
+			ret = bq2419x_charger_enable(bq2419x);
+			if (ret < 0) {
+				dev_err(bq2419x->dev,
+					"Charger enable failed %d", ret);
+				return ret;
+			}
+			schedule_delayed_work(&bq2419x->otg_reset_work,
+						BQ2419x_OTG_ENABLE_TIME);
+		}
+		mutex_unlock(&bq2419x->otg_mutex);
 		break;
 	case BQ2419x_FAULT_CHRG_SAFTY:
 		dev_err(bq2419x->dev,
@@ -912,8 +968,10 @@ static int __devinit bq2419x_probe(struct i2c_client *client,
 	bq2419x->irq = client->irq;
 	bq2419x->rtc = alarmtimer_get_rtcdev();
 	mutex_init(&bq2419x->mutex);
+	mutex_init(&bq2419x->otg_mutex);
 	bq2419x->suspended = 0;
 	bq2419x->chg_restart_timeout = 0;
+	bq2419x->is_otg_connected = 0;
 
 	ret = bq2419x_show_chip_version(bq2419x);
 	if (ret < 0) {
@@ -969,6 +1027,9 @@ static int __devinit bq2419x_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	INIT_DELAYED_WORK(&bq2419x->otg_reset_work,
+			bq2419x_otg_reset_work_handler);
+
 	ret = bq2419x_fault_clear_sts(bq2419x);
 	if (ret < 0) {
 		dev_err(bq2419x->dev, "fault clear status failed %d\n", ret);
@@ -1006,6 +1067,7 @@ scrub_psy:
 scrub_chg_reg:
 	regulator_unregister(bq2419x->chg_rdev);
 	mutex_destroy(&bq2419x->mutex);
+	mutex_destroy(&bq2419x->otg_mutex);
 	return ret;
 }
 
@@ -1024,6 +1086,8 @@ static int __devexit bq2419x_remove(struct i2c_client *client)
 		power_supply_unregister(&bq2419x->ac);
 	regulator_unregister(bq2419x->chg_rdev);
 	mutex_destroy(&bq2419x->mutex);
+	mutex_destroy(&bq2419x->otg_mutex);
+	cancel_delayed_work_sync(&bq2419x->otg_reset_work);
 	return 0;
 }
 
@@ -1069,6 +1133,7 @@ static void bq2419x_shutdown(struct i2c_client *client)
 	ret = bq2419x_wakealarm(bq2419x, alarm_time);
 	if (ret < 0)
 		dev_err(bq2419x->dev, "RTC wake alarm config failed %d\n", ret);
+	cancel_delayed_work_sync(&bq2419x->otg_reset_work);
 }
 
 #ifdef CONFIG_PM_SLEEP
