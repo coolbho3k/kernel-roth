@@ -228,10 +228,18 @@ static int set_power_itg(struct inv_gyro_state_s *st, unsigned char power_on)
  */
 int inv_set_power_state(struct inv_gyro_state_s *st, unsigned char power_on)
 {
+	int ret;
+	if (!power_on)
+		disable_irq(st->trigger.irq);
+
 	if (INV_MPU3050 == st->chip_type)
-		return set_power_mpu3050(st, power_on);
+		ret = set_power_mpu3050(st, power_on);
 	else
-		return set_power_itg(st, power_on);
+		ret = set_power_itg(st, power_on);
+
+	if (power_on)
+		enable_irq(st->trigger.irq);
+	return ret;
 }
 
 /**
