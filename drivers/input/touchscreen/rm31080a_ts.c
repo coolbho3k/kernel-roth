@@ -111,8 +111,8 @@ enum RM_SLOW_SCAN_LEVELS {
 
 #define TS_TIMER_PERIOD		HZ
 
-#define WDT_INIT_TIME		6000 /* 60 sec */
-#define WDT_NORMAL_TIME		100 /* 1 sec */
+#define WDT_INIT_TIME		60//00 /* 60 sec */
+#define WDT_NORMAL_TIME		1//00 /* 1 sec */
 
 struct timer_list ts_timer_triggle;
 static void init_ts_timer(void);
@@ -783,8 +783,10 @@ static int rm_tch_cmd_process(u8 selCase, u8 *pCmdTbl, struct rm_tch_ts *ts)
 				ret = OK;
 				break;
 			case KRL_CMD_MSLEEP:
+        u16Tmp = (u16)(pCmdTbl[_DATA]|(pCmdTbl[_SUB_CMD]<<8));
 				/*rm_printk("KRL_CMD_MSLEEP : %d ms\n",pCmdTbl[_DATA]);*/
-				msleep(pCmdTbl[_DATA]);
+        rm_printk("KRL_CMD_MSLEEP : %d ms\n",u16Tmp);
+				msleep(u16Tmp);
 				ret = OK;
 				break;
 			case KRL_CMD_FLUSH_QU:
@@ -1154,20 +1156,25 @@ static void rm_tch_init_ts_structure_part(void)
 /*==============================================================================*/
 static void rm_watchdog_enable(unsigned char u8Enable)
 {
-
+  static u8  u8IniBootFlg = 1;
 	g_stTs.u8WatchDogFlg = 0;
 	g_stTs.u32WatchDogCnt = 0;
 	g_stTs.u8WatchDogCheck=0;
 
-	if (u8Enable) {
+  if (u8Enable) {
 		g_stTs.u8WatchDogEnable = 1;
-		g_stTs.u32WatchDogTime = WDT_INIT_TIME; /*60sec*/
+    if (u8IniBootFlg) {
+		  g_stTs.u32WatchDogTime = WDT_INIT_TIME; /*60sec*/
+      u8IniBootFlg = 0;
+    } else {
+		g_stTs.u32WatchDogTime = WDT_NORMAL_TIME; /*1 sec*/
+    }
 	} else {
 		g_stTs.u8WatchDogEnable = 0;
 		g_stTs.u32WatchDogTime = 0xFFFFFFFF;
 	}
 	if ((g_stCtrl.bDebugMessage & DEBUG_DRIVER) == DEBUG_DRIVER)
-		rm_printk("Raydium TS: WatchDogEnable=%d\n",g_stTs.u8WatchDogEnable);
+		rm_printk("Raydium TS: WatchDogEnable=%d,%d\n",g_stTs.u8WatchDogEnable,u8IniBootFlg);
 
 }
 
@@ -1176,7 +1183,7 @@ static void rm_watchdog_work_function(unsigned char scan_mode)
 	if ((g_stTs.u8WatchDogEnable==0)||(g_stTs.bInitFinish==0)) {
 		return;
 	}
-	if (g_stTs.u32WatchDogCnt++ > g_stTs.u32WatchDogTime) {
+	if (g_stTs.u32WatchDogCnt++ >= g_stTs.u32WatchDogTime) {
 		if ((g_stCtrl.bDebugMessage & DEBUG_DRIVER) == DEBUG_DRIVER)
 			rm_printk("##watchdog work: Time:%dsec Cnt:%d,Flg:%d(%x)\n",g_stTs.u32WatchDogTime/100,g_stTs.u32WatchDogCnt,g_stTs.u8WatchDogFlg,g_stTs.u8ScanModeState);
 
