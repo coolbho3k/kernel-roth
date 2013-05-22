@@ -111,8 +111,8 @@ enum RM_SLOW_SCAN_LEVELS {
 
 #define TS_TIMER_PERIOD		HZ
 
-#define WDT_INIT_TIME		60//00 /* 60 sec */
-#define WDT_NORMAL_TIME		1//00 /* 1 sec */
+#define WDT_INIT_TIME		6000 /* 60 sec */
+#define WDT_NORMAL_TIME		100 /* 1 sec */
 
 struct timer_list ts_timer_triggle;
 static void init_ts_timer(void);
@@ -750,7 +750,19 @@ static int rm_tch_cmd_process(u8 selCase, u8 *pCmdTbl, struct rm_tch_ts *ts)
 			case KRL_CMD_CONFIG_CLK:
 				/*rm_printk("KRL_CMD_CONFIG_CLK : %d - %d\n",pCmdTbl[_SUB_CMD],pCmdTbl[_DATA]);*/
 				ret = OK;
-/* Temporarily solving external clk issue for NV for different kind of clk source */
+/* Temporarily solving external clk issue for NV for different kind of clk source
+				if (ts && ts->clk) {
+					if (pCmdTbl[_SUB_CMD] == KRL_SUB_CMD_SET_CLK) {
+						if (pCmdTbl[_DATA])
+							clk_enable(ts->clk);
+						else
+							clk_disable(ts->clk);
+					} else
+						ret = FAIL;
+				} else {
+					ret = FAIL;
+				}
+*/
 				if (pCmdTbl[_SUB_CMD] == KRL_SUB_CMD_SET_CLK) {
 					if (ts && ts->clk) {
 						if (pCmdTbl[_DATA])
@@ -783,10 +795,8 @@ static int rm_tch_cmd_process(u8 selCase, u8 *pCmdTbl, struct rm_tch_ts *ts)
 				ret = OK;
 				break;
 			case KRL_CMD_MSLEEP:
-        u16Tmp = (u16)(pCmdTbl[_DATA]|(pCmdTbl[_SUB_CMD]<<8));
 				/*rm_printk("KRL_CMD_MSLEEP : %d ms\n",pCmdTbl[_DATA]);*/
-        rm_printk("KRL_CMD_MSLEEP : %d ms\n",u16Tmp);
-				msleep(u16Tmp);
+				msleep(pCmdTbl[_DATA]);
 				ret = OK;
 				break;
 			case KRL_CMD_FLUSH_QU:
@@ -1156,25 +1166,20 @@ static void rm_tch_init_ts_structure_part(void)
 /*==============================================================================*/
 static void rm_watchdog_enable(unsigned char u8Enable)
 {
-  static u8  u8IniBootFlg = 1;
+
 	g_stTs.u8WatchDogFlg = 0;
 	g_stTs.u32WatchDogCnt = 0;
 	g_stTs.u8WatchDogCheck=0;
 
-  if (u8Enable) {
+	if (u8Enable) {
 		g_stTs.u8WatchDogEnable = 1;
-    if (u8IniBootFlg) {
-		  g_stTs.u32WatchDogTime = WDT_INIT_TIME; /*60sec*/
-      u8IniBootFlg = 0;
-    } else {
-		g_stTs.u32WatchDogTime = WDT_NORMAL_TIME; /*1 sec*/
-    }
+		g_stTs.u32WatchDogTime = WDT_INIT_TIME; /*60sec*/
 	} else {
 		g_stTs.u8WatchDogEnable = 0;
 		g_stTs.u32WatchDogTime = 0xFFFFFFFF;
 	}
 	if ((g_stCtrl.bDebugMessage & DEBUG_DRIVER) == DEBUG_DRIVER)
-		rm_printk("Raydium TS: WatchDogEnable=%d,%d\n",g_stTs.u8WatchDogEnable,u8IniBootFlg);
+		rm_printk("Raydium TS: WatchDogEnable=%d\n",g_stTs.u8WatchDogEnable);
 
 }
 
@@ -1183,7 +1188,7 @@ static void rm_watchdog_work_function(unsigned char scan_mode)
 	if ((g_stTs.u8WatchDogEnable==0)||(g_stTs.bInitFinish==0)) {
 		return;
 	}
-	if (g_stTs.u32WatchDogCnt++ >= g_stTs.u32WatchDogTime) {
+	if (g_stTs.u32WatchDogCnt++ > g_stTs.u32WatchDogTime) {
 		if ((g_stCtrl.bDebugMessage & DEBUG_DRIVER) == DEBUG_DRIVER)
 			rm_printk("##watchdog work: Time:%dsec Cnt:%d,Flg:%d(%x)\n",g_stTs.u32WatchDogTime/100,g_stTs.u32WatchDogCnt,g_stTs.u8WatchDogFlg,g_stTs.u8ScanModeState);
 
@@ -1407,7 +1412,6 @@ static ssize_t rm_tch_smooth_level_handler(const char *buf, size_t count)
 		return count;
 
 	ret = (ssize_t) count;
-
 	error = kstrtoul(buf, 10, &val);
 	if (error) {
 		ret = error;
@@ -2117,12 +2121,12 @@ static void init_ts_timer(void)
 	init_timer(&ts_timer_triggle);
 	ts_timer_triggle.function = ts_timer_triggle_function;
 	ts_timer_triggle.data = ((unsigned long) 0);
-	ts_timer_triggle.expires = jiffies + TS_TIMER_PERIOD;
+	ts_timer_triggle.expires = jiffies + TS_TIMER_PERIOD;//msecs_to_jiffies(10);/*100*HZ;*/
 }
 static void ts_timer_triggle_function(unsigned long option)
 {
 	queue_work(g_stTs.rm_timer_workqueue, &g_stTs.rm_timer_work);
-	ts_timer_triggle.expires = jiffies + TS_TIMER_PERIOD;
+	ts_timer_triggle.expires = jiffies + TS_TIMER_PERIOD;//msecs_to_jiffies(10);/*100*HZ;*/
 	add_timer(&ts_timer_triggle);
 }
 
