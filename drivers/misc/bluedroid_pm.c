@@ -34,6 +34,7 @@
 #include <linux/clk.h>
 #include <linux/interrupt.h>
 #include <linux/wakelock.h>
+#include <linux/delay.h>
 #include <linux/pm_qos.h>
 
 #define PROC_DIR	"bluetooth/sleep"
@@ -62,6 +63,20 @@ static bool bluedroid_pm_blocked = 1;
 static int create_bt_proc_interface(void *drv_data);
 static void remove_bt_proc_interface(void);
 
+static DEFINE_MUTEX(bt_wlan_sync);
+
+void bt_wlan_lock(void)
+{
+	mutex_lock(&bt_wlan_sync);
+}
+EXPORT_SYMBOL(bt_wlan_lock);
+
+void bt_wlan_unlock(void)
+{
+	mutex_unlock(&bt_wlan_sync);
+}
+EXPORT_SYMBOL(bt_wlan_unlock);
+
 static irqreturn_t bluedroid_pm_hostwake_isr(int irq, void *dev_id)
 {
 	/* schedule a tasklet to handle the change in the host wake line */
@@ -77,6 +92,9 @@ static int bluedroid_pm_rfkill_set_power(void *data, bool blocked)
 	 */
 	if (gpio_get_value(bluedroid_pm->gpio_shutdown) == !blocked)
 		return 0;
+
+	bt_wlan_lock();
+	msleep(300);
 
 	if (blocked) {
 		if (bluedroid_pm->gpio_shutdown)
@@ -103,6 +121,10 @@ static int bluedroid_pm_rfkill_set_power(void *data, bool blocked)
 				PM_QOS_CPU_FREQ_MIN, PM_QOS_DEFAULT_VALUE);
 	}
 	bluedroid_pm->is_blocked = blocked;
+
+	msleep(50);
+	bt_wlan_unlock();
+
 	return 0;
 }
 

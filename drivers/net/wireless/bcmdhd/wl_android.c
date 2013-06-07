@@ -48,6 +48,9 @@
 #endif
 #endif /* CONFIG_WIFI_CONTROL_FUNC */
 
+#ifdef ENABLE_WiFI_BT_TURN_ON_SYNC
+#include <linux/delay.h>
+#endif
 /*
  * Android private command strings, PLEASE define new private commands here
  * so they can be updated easily in the future (if needed)
@@ -195,6 +198,10 @@ extern int dhd_wlfc_init(dhd_pub_t *dhd);
 extern void dhd_wlfc_deinit(dhd_pub_t *dhd);
 #endif
 
+#ifdef ENABLE_WiFI_BT_TURN_ON_SYNC
+extern void bt_wlan_lock(void);
+extern void bt_wlan_unlock(void);
+#endif
 
 extern bool ap_fw_loaded;
 #if defined(CUSTOMER_HW2)
@@ -1254,7 +1261,17 @@ int wifi_set_power(int on, unsigned long msec)
 {
 	DHD_ERROR(("%s = %d\n", __FUNCTION__, on));
 	if (wifi_control_data && wifi_control_data->set_power) {
+#ifdef ENABLE_WiFI_BT_TURN_ON_SYNC
+		bt_wlan_lock();
+		if (on)
+			msleep(600);
+		else
+			msleep(50);
+#endif
 		wifi_control_data->set_power(on);
+#ifdef ENABLE_WiFI_BT_TURN_ON_SYNC
+		bt_wlan_unlock();
+#endif
 	}
 	if (msec)
 		msleep(msec);
