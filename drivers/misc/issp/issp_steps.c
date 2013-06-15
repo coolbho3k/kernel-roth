@@ -652,6 +652,24 @@ static int issp_verify_checksum(struct issp_host *host)
 }
 
 /* global functions */
+extern struct issp_host *g_issp_host;
+
+void issp_uc_reset(void)
+{
+	struct issp_host *host = g_issp_host;
+
+	if (!host) {
+		pr_err("%s: !host\n", __func__);
+		return;
+	}
+
+	/* reset */
+	usleep_range(ISSP_RESET_ASSERT_DELAY, ISSP_RESET_ASSERT_DELAY);
+	pin_reset_lo(host);
+	udelay(ISSP_RESET_PULSE_LENGTH);
+	pin_reset_hi(host);
+	udelay(ISSP_RESET_POST_DELAY);
+}
 
 int issp_uc_program(struct issp_host *host)
 {

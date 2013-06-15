@@ -30,4 +30,8 @@
    descriptor */
 #define USB_QUIRK_DELAY_INIT		0x00000040
 
+/* reset device if bus resume fails - assume that resume failure is
+   due to usb device crash */
+#define USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL  0x00000100
+
 #endif /* __LINUX_USB_QUIRKS_H */

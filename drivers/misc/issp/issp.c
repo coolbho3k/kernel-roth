@@ -128,6 +128,8 @@ static int issp_need_update(struct issp_host *host, bool *update)
 	return 0;
 }
 
+struct issp_host *g_issp_host;
+
 static int __init issp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -162,6 +164,7 @@ static int __init issp_probe(struct platform_device *pdev)
 
 	host->pdev = pdev;
 	host->pdata = pdata;
+	g_issp_host = host;
 	ret = request_ihex_firmware(&host->fw, pdata->fw_name, dev);
 	if (ret) {
 		dev_err(dev, "Request firmware %s failed!\n", pdata->fw_name);
@@ -197,6 +200,10 @@ static int __init issp_probe(struct platform_device *pdev)
 
 err_id:
 	issp_uc_run(host);
+	gpio_direction_input(pdata->data_gpio);
+	gpio_direction_input(pdata->clk_gpio);
+	release_firmware(host->fw);
+	return 0;
 
 err:
 	gpio_direction_input(pdata->data_gpio);
@@ -209,6 +216,7 @@ err:
 
 static int __exit issp_remove(struct platform_device *pdev)
 {
+	g_issp_host = NULL;
 	return 0;
 }
 

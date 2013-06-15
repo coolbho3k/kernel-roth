@@ -2569,6 +2569,17 @@ static int finish_port_resume(struct usb_device *udev)
  retry_reset_resume:
 		status = usb_reset_and_verify_device(udev);
 
+/* For testing reset on every resume */
+#if 0
+	if (udev->quirks & USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL) {
+		extern void issp_uc_reset(void);
+		dev_err(&udev->dev, "USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL\n");
+		issp_uc_reset();
+		/* device is gone after we reset it */
+		status = -ENODEV;
+	}
+#endif
+
  	/* 10.5.4.5 says be sure devices in the tree are still there.
  	 * For now let's assume the device didn't go crazy on resume,
 	 * and device drivers will know about any resume quirks.
@@ -2581,9 +2592,19 @@ static int finish_port_resume(struct usb_device *udev)
 
 		/* If a normal resume failed, try doing a reset-resume */
 		if (status && !udev->reset_resume && udev->persist_enabled) {
-			dev_dbg(&udev->dev, "retry with reset-resume\n");
-			udev->reset_resume = 1;
-			goto retry_reset_resume;
+			dev_err(&udev->dev, "retry with reset-resume\n");
+			if (udev->quirks &
+				USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL) {
+				extern void issp_uc_reset(void);
+				dev_err(&udev->dev,
+				"USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL\n");
+				issp_uc_reset();
+				/* device is gone after we reset it */
+				status = -ENODEV;
+			} else {
+				udev->reset_resume = 1;
+				goto retry_reset_resume;
+			}
 		}
 	}
 
