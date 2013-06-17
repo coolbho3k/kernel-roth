@@ -262,6 +262,8 @@ struct inv_mpu_slave;
  *  @early_suspend:     struct for early suspend.
  *  @early_suspend_enable: sysfs interface to store current early_suspend.
  *  @inv_regulator_s:	Regulator sturcture to store regulator.
+ *  @power_lock:	Mutex lock to secure critical section for power on/off
+ *  @irq_disabled:	Variable to check whether irq is disabled or not
  */
 struct inv_gyro_state_s {
 	struct inv_chip_config_s chip_config;
@@ -296,6 +298,8 @@ struct inv_gyro_state_s {
 	long long last_isr_time;
 	struct inv_regulator_s inv_regulator;
 	bool i2c_shutdown;
+	struct mutex power_lock;
+	bool irq_disabled;
 };
 
 /* produces an unique identifier for each device based on the

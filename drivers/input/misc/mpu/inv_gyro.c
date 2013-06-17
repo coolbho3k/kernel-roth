@@ -229,16 +229,21 @@ static int set_power_itg(struct inv_gyro_state_s *st, unsigned char power_on)
 int inv_set_power_state(struct inv_gyro_state_s *st, unsigned char power_on)
 {
 	int ret;
-	if (!power_on)
+	mutex_lock(&st->power_lock);
+	if (!power_on && st->trigger.irq && !st->irq_disabled) {
 		disable_irq(st->trigger.irq);
-
+		st->irq_disabled = true;
+	}
 	if (INV_MPU3050 == st->chip_type)
 		ret = set_power_mpu3050(st, power_on);
 	else
 		ret = set_power_itg(st, power_on);
 
-	if (power_on)
+	if (power_on && st->trigger.irq && st->irq_disabled) {
 		enable_irq(st->trigger.irq);
+		st->irq_disabled = false;
+	}
+	mutex_unlock(&st->power_lock);
 	return ret;
 }
 
@@ -2761,6 +2766,7 @@ static int inv_mod_probe(struct i2c_client *client,
 		goto out_no_free;
 	}
 
+	mutex_init(&st->power_lock);
 	inv_init_regulator(st, client);
 
 	/* Make state variables available to all _show and _store functions. */
@@ -2853,6 +2859,7 @@ out_free:
 		regulator_disable(st->inv_regulator.regulator_vlogic);
 		regulator_disable(st->inv_regulator.regulator_vdd);
 	}
+	mutex_destroy(&st->power_lock);
 	kfree(st);
 out_no_free:
 	dev_err(&client->adapter->dev, "%s failed %d\n", __func__, result);
@@ -2883,6 +2890,7 @@ static int inv_mod_remove(struct i2c_client *client)
 		regulator_disable(st->inv_regulator.regulator_vlogic);
 		regulator_disable(st->inv_regulator.regulator_vdd);
 	}
+	mutex_destroy(&st->power_lock);
 	kfree(st);
 	dev_info(&client->adapter->dev, "Gyro module removed.\n");
 	return 0;
@@ -2892,8 +2900,6 @@ static void inv_i2c_shutdown(struct i2c_client *client)
 {
 	struct inv_gyro_state_s *st = i2c_get_clientdata(client);
 
-	if (client->irq)
-		disable_irq(client->irq);
 	set_inv_enable(st, 0);
 	inv_set_power_state(st, 0);
 	st->i2c_shutdown = true;
