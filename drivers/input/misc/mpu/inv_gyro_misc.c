@@ -69,8 +69,8 @@
 #define DEF_ACCEL_ST_SHIFT_MIN      (300)
 #define DEF_ACCEL_ST_SHIFT_MAX      (950)
 
-#define DEF_ACCEL_ST_SHIFT_DELTA    (140)
-#define DEF_GYRO_CT_SHIFT_DELTA     (140)
+#define DEF_ACCEL_ST_SHIFT_DELTA    (500)
+#define DEF_GYRO_CT_SHIFT_DELTA     (500)
 /* gyroscope Coriolis self test min and max bias shift (dps) */
 #define DEF_GYRO_CT_SHIFT_MIN       (10)
 #define DEF_GYRO_CT_SHIFT_MAX       (105)
