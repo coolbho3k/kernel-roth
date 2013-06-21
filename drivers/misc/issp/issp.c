@@ -28,6 +28,8 @@
 
 #define DRIVER_NAME "issp"
 
+struct issp_host *g_issp_host;
+
 static int issp_check_fw(struct issp_host *host)
 {
 	const struct ihex_binrec *rec;
@@ -129,6 +131,41 @@ static int issp_need_update(struct issp_host *host, bool *update)
 }
 
 struct issp_host *g_issp_host;
+extern void roth_usb_unload(void);
+extern void roth_usb_reload(void);
+
+#define ISSP_RECOVERY_DELAY 10
+
+struct workqueue_struct *issp_workqueue;
+struct delayed_work issp_recovery_work;
+
+static void issp_recovery_work_func(struct delayed_work *dwork)
+{
+	int i;
+	extern void roth_usb_unload(void);
+	extern void roth_usb_reload(void);
+
+	pr_info("%s\n", __func__);
+
+	for (i = 0; i < 1; i++) {
+		pr_info("%s: recovery attempt #%d\n", __func__, i);
+		roth_usb_unload();
+		issp_uc_reset();
+		roth_usb_reload();
+	}
+}
+
+void issp_start_recovery_work(void)
+{
+	pr_info("%s\n", __func__);
+	if (!issp_workqueue) {
+		pr_err("%s: no workqueue!\n", __func__);
+		return;
+	}
+	queue_delayed_work(issp_workqueue, &issp_recovery_work,
+	msecs_to_jiffies(ISSP_RECOVERY_DELAY));
+
+}
 
 static int __init issp_probe(struct platform_device *pdev)
 {
@@ -198,6 +235,14 @@ static int __init issp_probe(struct platform_device *pdev)
 			dev_err(dev, "Firmware update failed!\n");
 	}
 
+	/* create workqueue to recover from failed usb resume */
+	issp_workqueue = create_workqueue("issp_recovery_wq");
+	if (!issp_workqueue) {
+		dev_err(&pdev->dev, "can't create work queue\n");
+		goto err;
+	}
+	INIT_DELAYED_WORK(&issp_recovery_work, issp_recovery_work_func);
+
 err_id:
 	issp_uc_run(host);
 	gpio_direction_input(pdata->data_gpio);
@@ -217,6 +262,13 @@ err:
 static int __exit issp_remove(struct platform_device *pdev)
 {
 	g_issp_host = NULL;
+
+	/* delete workqueue used to recover from failed usb resume */
+	if (issp_workqueue) {
+		destroy_workqueue(issp_workqueue);
+		issp_workqueue = NULL;
+	}
+
 	return 0;
 }
 
@@ -225,7 +277,7 @@ static struct platform_driver issp_driver = {
 	.driver	= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
-	}
+	},
 };
 
 static int __init issp_init(void)

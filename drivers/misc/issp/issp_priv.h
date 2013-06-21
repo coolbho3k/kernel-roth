@@ -54,5 +54,6 @@ int issp_read_block(struct issp_host *host, uint8_t block_idx, uint8_t addr,
 void issp_fw_rewind(struct issp_host *host);
 void issp_fw_seek_security(struct issp_host *host);
 uint8_t issp_fw_get_byte(struct issp_host *host);
+void issp_uc_reset(void);
 
 #endif

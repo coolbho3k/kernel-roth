@@ -2569,12 +2569,12 @@ static int finish_port_resume(struct usb_device *udev)
  retry_reset_resume:
 		status = usb_reset_and_verify_device(udev);
 
-/* For testing reset on every resume */
+/* For testing recover issp on every usb resume */
 #if 0
 	if (udev->quirks & USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL) {
-		extern void issp_uc_reset(void);
-		dev_err(&udev->dev, "USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL\n");
-		issp_uc_reset();
+		extern void issp_start_recovery_work(void);
+		dev_err(&udev->dev, "USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL - start recovery work\n");
+		issp_start_recovery_work();
 		/* device is gone after we reset it */
 		status = -ENODEV;
 	}
@@ -2595,10 +2595,10 @@ static int finish_port_resume(struct usb_device *udev)
 			dev_err(&udev->dev, "retry with reset-resume\n");
 			if (udev->quirks &
 				USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL) {
-				extern void issp_uc_reset(void);
+				extern void issp_start_recovery_work(void);
 				dev_err(&udev->dev,
 				"USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL\n");
-				issp_uc_reset();
+				issp_start_recovery_work();
 				/* device is gone after we reset it */
 				status = -ENODEV;
 			} else {
@@ -3257,11 +3257,19 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
 fail:
-	if (retval) {
+	if (retval &&
+		!(udev->quirks & USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL)) {
 		hub_port_disable(hub, port1, 0);
 		update_devnum(udev, devnum);	/* for disconnect processing */
 	}
 	mutex_unlock(&usb_address0_mutex);
+
+	if (udev->quirks & USB_QUIRK_RESET_DEVICE_ON_RESUME_FAIL) {
+		dev_err(&udev->dev, "Reset device-failure to recover from err\n");
+		extern void issp_start_recovery_work(void);
+		issp_start_recovery_work();
+		retval = 0;
+	}
 	return retval;
 }
 

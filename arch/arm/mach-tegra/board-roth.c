@@ -568,6 +568,54 @@ static struct tegra_usb_otg_data tegra_otg_pdata = {
 	.ehci_pdata = &tegra_ehci1_utmi_pdata,
 };
 
+static struct platform_device *
+tegra_usb_hsic_host_register(struct platform_device *ehci_dev)
+{
+	struct platform_device *pdev;
+	int val;
+
+	pdev = platform_device_alloc(ehci_dev->name, ehci_dev->id);
+	if (!pdev)
+		return NULL;
+
+	val = platform_device_add_resources(pdev, ehci_dev->resource,
+						ehci_dev->num_resources);
+	if (val)
+		goto error;
+
+	pdev->dev.dma_mask =  ehci_dev->dev.dma_mask;
+	pdev->dev.coherent_dma_mask = ehci_dev->dev.coherent_dma_mask;
+
+	val = platform_device_add_data(pdev, &tegra_ehci3_utmi_pdata,
+			sizeof(struct tegra_usb_platform_data));
+	if (val)
+		goto error;
+
+	val = platform_device_add(pdev);
+	if (val)
+		goto error;
+
+	return pdev;
+
+error:
+	pr_err("%s: failed to add the host contoller device\n", __func__);
+	platform_device_put(pdev);
+	return NULL;
+}
+
+static void tegra_usb_hsic_host_unregister(struct platform_device **platdev)
+{
+	struct platform_device *pdev = *platdev;
+
+	if (pdev && &pdev->dev) {
+		platform_device_unregister(pdev);
+		*platdev = NULL;
+	} else
+		pr_err("%s: no platform device\n", __func__);
+}
+
+static struct platform_device *roth_usb_ehci3;
+
 static void roth_usb_init(void)
 {
 	tegra_otg_device.dev.platform_data = &tegra_otg_pdata;
@@ -576,10 +624,28 @@ static void roth_usb_init(void)
 	/* Setup the udc platform data */
 	tegra_udc_device.dev.platform_data = &tegra_udc_pdata;
 
+#if 0
 	tegra_ehci3_device.dev.platform_data = &tegra_ehci3_utmi_pdata;
 	platform_device_register(&tegra_ehci3_device);
+#else
+	roth_usb_ehci3 = tegra_usb_hsic_host_register(&tegra_ehci3_device);
+#endif
 }
 
+void roth_usb_unload(void)
+{
+	pr_info("%s\n", __func__);
+
+	/* unload ehci3 usb host controller */
+	tegra_usb_hsic_host_unregister(&roth_usb_ehci3);
+
+}
+
+void roth_usb_reload(void)
+{
+	pr_info("%s\n", __func__);
+	roth_usb_ehci3 = tegra_usb_hsic_host_register(&tegra_ehci3_device);
+}
 #else
 static void roth_usb_init(void) { }
 #endif
