@@ -23,12 +23,15 @@
 #include <linux/platform_device.h>
 #include <linux/ihex.h>
 #include <linux/gpio.h>
+#include <linux/wakelock.h>
+#include <linux/delay.h>
 
 #include "issp_priv.h"
 
 #define DRIVER_NAME "issp"
 
 struct issp_host *g_issp_host;
+struct wake_lock *g_issp_wake_lock;
 
 static int issp_check_fw(struct issp_host *host)
 {
@@ -139,20 +142,28 @@ extern void roth_usb_reload(void);
 struct workqueue_struct *issp_workqueue;
 struct delayed_work issp_recovery_work;
 
-static void issp_recovery_work_func(struct delayed_work *dwork)
+static void issp_recovery_work_func(struct work_struct *work)
 {
 	int i;
 	extern void roth_usb_unload(void);
 	extern void roth_usb_reload(void);
 
 	pr_info("%s\n", __func__);
+	if (!g_issp_wake_lock) {
+		pr_err("%s: wake_lock null!!\n", __func__);
+		return;
+	}
 
 	for (i = 0; i < 1; i++) {
 		pr_info("%s: recovery attempt #%d\n", __func__, i);
 		roth_usb_unload();
 		issp_uc_reset();
 		roth_usb_reload();
+		msleep(500);
 	}
+
+	/*Done resetting JS, lets release the Wakelock*/
+	wake_unlock(g_issp_wake_lock);
 }
 
 void issp_start_recovery_work(void)
@@ -162,6 +173,9 @@ void issp_start_recovery_work(void)
 		pr_err("%s: no workqueue!\n", __func__);
 		return;
 	}
+
+	/*Hold wakelock, so we can be sure that JS resets!*/
+	wake_lock(g_issp_wake_lock);
 	queue_delayed_work(issp_workqueue, &issp_recovery_work,
 	msecs_to_jiffies(ISSP_RECOVERY_DELAY));
 
@@ -235,11 +249,21 @@ static int __init issp_probe(struct platform_device *pdev)
 			dev_err(dev, "Firmware update failed!\n");
 	}
 
+	g_issp_wake_lock = devm_kzalloc(dev, sizeof(struct wake_lock),
+								GFP_KERNEL);
+	if (!g_issp_wake_lock)
+		goto err;
+
+	/*Wake lock to prevent suspend when USB is deregistered! and recovery
+	of JS is happening!*/
+	wake_lock_init(g_issp_wake_lock, WAKE_LOCK_SUSPEND,
+							"issp-js-recovery");
+
 	/* create workqueue to recover from failed usb resume */
 	issp_workqueue = create_workqueue("issp_recovery_wq");
 	if (!issp_workqueue) {
 		dev_err(&pdev->dev, "can't create work queue\n");
-		goto err;
+		goto err_work;
 	}
 	INIT_DELAYED_WORK(&issp_recovery_work, issp_recovery_work_func);
 
@@ -250,13 +274,14 @@ err_id:
 	release_firmware(host->fw);
 	return 0;
 
+err_work:
+	devm_kfree(dev, g_issp_wake_lock);
 err:
 	gpio_direction_input(pdata->data_gpio);
 	gpio_direction_input(pdata->clk_gpio);
 	release_firmware(host->fw);
 	devm_kfree(dev, host);
-
-	return 0;
+	return -ENOMEM;
 }
 
 static int __exit issp_remove(struct platform_device *pdev)
@@ -268,6 +293,9 @@ static int __exit issp_remove(struct platform_device *pdev)
 		destroy_workqueue(issp_workqueue);
 		issp_workqueue = NULL;
 	}
+
+	if (g_issp_wake_lock != NULL)
+		wake_lock_destroy(g_issp_wake_lock);
 
 	return 0;
 }
