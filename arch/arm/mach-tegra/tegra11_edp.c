@@ -110,11 +110,537 @@ static struct core_edp_entry core_edp_table[] = {
 			},
 		},
 	},
+	{
+		.sku		= 0x3,		/* SKU = 3 */
+		.cap_mA		= 8000,		/* 8A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 588 },
+				}
+			},
+		},
+	},
+	/* SKU 4 */
+	{
+		.sku		= 0x4,		/* SKU = 4 */
+		.cap_mA		= 6000,		/* 6A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 636 },
+				 { 924, 624 },
+				 { 924, 588 },
+				 { 924, 526 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 672 },
+				 { 792, 636 },
+				 { 792, 636 },
+				 { 792, 576 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 672 },
+				 { 624, 672 },
+				 { 624, 672 },
+				 { 624, 636 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 660 },
+				 { 924, 636 },
+				 { 924, 588 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 792, 672 },
+				 { 792, 672 },
+				 { 792, 648 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 792, 672 },
+				 { 792, 672 },
+				 { 792, 648 },
+				}
+			},
+		},
+	},
+	{
+		.sku		= 0x4,		/* SKU = 4 */
+		.cap_mA		= 8000,		/* 8A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 648 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 648 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 648 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 648 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 672 },
+				 { 924, 672 },
+				 { 924, 672 },
+				 { 924, 648 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 924, 816 },
+				 { 924, 816 },
+				 { 924, 816 },
+				 { 924, 648 },
+				}
+			},
+		},
+	},
+	/* SKU 5 */
+	{
+		.sku		= 0x5,		/* SKU = 5 */
+		.cap_mA		= 4000,		/* 4A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 336 },
+				 { 792, 336 },
+				 { 792, 300 },
+				 { 792, 240 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 624, 396 },
+				 { 660, 372 },
+				 { 660, 324 },
+				 { 660, 288 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 492 },
+				 { 408, 396 },
+				 { 408, 396 },
+				 { 408, 396 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 432 },
+				 { 792, 432 },
+				 { 792, 396 },
+				 { 792, 348 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 624, 492 },
+				 { 660, 492 },
+				 { 660, 444 },
+				 { 660, 384 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 516 },
+				 { 408, 516 },
+				 { 408, 516 },
+				 { 408, 492 },
+				}
+			},
+		},
+	},
+	{
+		.sku		= 0x5,		/* SKU = 5 */
+		.cap_mA		= 4000,		/* 4A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 348 },
+				 { 792, 336 },
+				 { 792, 300 },
+				 { 792, 240 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 624, 420 },
+				 { 660, 372 },
+				 { 660, 324 },
+				 { 660, 288 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 528 },
+				 { 408, 492 },
+				 { 408, 420 },
+				 { 408, 420 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 432 },
+				 { 792, 432 },
+				 { 792, 396 },
+				 { 792, 348 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 624, 528 },
+				 { 660, 492 },
+				 { 660, 444 },
+				 { 660, 384 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 564 },
+				 { 408, 564 },
+				 { 408, 528 },
+				 { 408, 528 },
+				}
+			},
+		},
+	},
+	{
+		.sku		= 0x5,		/* SKU = 5 */
+		.cap_mA		= 6000,		/* 6A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 516 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 660, 600 },
+				 { 660, 564 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 660, 600 },
+				 { 528, 600 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 624, 600 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 624, 600 },
+				}
+			},
+		},
+	},
+	/* SKU 6 */
+	{
+		.sku		= 0x6,		/* SKU = 6 */
+		.cap_mA		= 4000,		/* 4A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 348 },
+				 { 792, 348 },
+				 { 792, 312 },
+				 { 792, 264 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 660, 372 },
+				 { 660, 372 },
+				 { 660, 336 },
+				 { 660, 300 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 492 },
+				 { 408, 396 },
+				 { 408, 396 },
+				 { 408, 396 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 444 },
+				 { 792, 444 },
+				 { 792, 408 },
+				 { 792, 372 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 660, 492 },
+				 { 660, 492 },
+				 { 660, 456 },
+				 { 660, 408 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 552 },
+				 { 408, 516 },
+				 { 408, 516 },
+				 { 408, 516 },
+				}
+			},
+		},
+	},
+	{
+		.sku		= 0x6,		/* SKU = 6 */
+		.cap_mA		= 4000,		/* 4A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 348 },
+				 { 792, 348 },
+				 { 792, 312 },
+				 { 792, 264 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 660, 420 },
+				 { 660, 372 },
+				 { 660, 336 },
+				 { 660, 300 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 528 },
+				 { 408, 492 },
+				 { 408, 420 },
+				 { 408, 420 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 444 },
+				 { 792, 444 },
+				 { 792, 408 },
+				 { 792, 372 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 660, 492 },
+				 { 660, 492 },
+				 { 660, 456 },
+				 { 660, 408 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 408, 564 },
+				 { 408, 564 },
+				 { 408, 564 },
+				 { 408, 528 },
+				}
+			},
+		},
+	},
+	{
+		.sku		= 0x6,		/* SKU = 6 */
+		.cap_mA		= 6000,		/* 6A cap */
+		.mult		= 1000000,	/* MHZ */
+		.cap_scpu_on	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 516 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 660, 600 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 660, 600 },
+				}
+			},
+		},
+		.cap_scpu_off	= {
+			/* favor emc */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				},
+			},
+			/* balanced profile */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				},
+			},
+			/* favor gpu */
+			{	/* core modules power state 0 (all ON) */
+				{{ 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				 { 792, 600 },
+				}
+			},
+		},
+	},
 };
 
 static struct core_edp_entry *find_edp_entry(int sku, unsigned int regulator_mA)
 {
 	int i;
+
+	if ((sku == 0x5) || (sku == 0x6)) {
+		if (regulator_mA >= 8000)
+			return NULL;		/* no edp limits above 8A */
+	} else if ((sku == 0x3) || (sku == 0x4)) {
+		if (regulator_mA >= 8000)
+			regulator_mA = 8000;	/* apply 8A table above 8A */
+	} else {
+		return NULL;			/* no edp limits at all */
+	}
 
 	for (i = 0; i < ARRAY_SIZE(core_edp_table); i++) {
 		struct core_edp_entry *entry = &core_edp_table[i];
