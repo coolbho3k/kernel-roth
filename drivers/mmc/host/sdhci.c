@@ -2,6 +2,7 @@
  *  linux/drivers/mmc/host/sdhci.c - Secure Digital Host Controller Interface driver
  *
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
+ *  Copyright (c) 2013 NVIDIA Corporation, All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1021,7 +1022,6 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 	if (cmd->data || cmd->opcode == MMC_SEND_TUNING_BLOCK ||
 	    cmd->opcode == MMC_SEND_TUNING_BLOCK_HS200)
 		flags |= SDHCI_CMD_DATA;
-
 	sdhci_writew(host, SDHCI_MAKE_CMD(cmd->opcode, flags), SDHCI_COMMAND);
 }
 
@@ -1746,7 +1746,7 @@ static int sdhci_execute_tuning(struct mmc_host *mmc, u32 opcode)
 
 	if ((host->quirks & SDHCI_QUIRK_NON_STANDARD_TUNING) &&
 		host->ops->execute_freq_tuning) {
-		err = host->ops->execute_freq_tuning(host, opcode);
+		err = host->ops->execute_freq_tuning(host, opcode, false);
 		spin_unlock(&host->lock);
 		enable_irq(host->irq);
 		return err;

@@ -29,6 +29,7 @@
 #include <linux/mmc/host.h>
 #include <linux/module.h>
 #include <linux/mmc/sd.h>
+#include <linux/mmc/mmc.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
 #include <linux/pm_runtime.h>
@@ -94,9 +95,11 @@
 #define MMC_TUNING_BLOCK_SIZE_BUS_WIDTH_8	128
 #define MMC_TUNING_BLOCK_SIZE_BUS_WIDTH_4	64
 #define MAX_TAP_VALUES	255
-#define TUNING_FREQ_COUNT	2
+#define TUNING_FREQ_COUNT	3
 #define TUNING_VOLTAGES_COUNT	2
 #define TUNING_RETRIES	1
+
+struct sdhci_host *sdhci_host_for_sdio;
 
 static unsigned int uhs_max_freq_MHz[] = {
 	[MMC_TIMING_UHS_SDR50] = 100,
@@ -179,6 +182,7 @@ struct sdhci_tegra_sd_stats {
 enum tegra_tuning_freq {
 	TUNING_LOW_FREQ,
 	TUNING_HIGH_FREQ,
+	TUNING_HIGH_FREQ_HV,
 };
 
 struct freq_tuning_params {
@@ -196,7 +200,12 @@ static struct freq_tuning_params tuning_params[TUNING_FREQ_COUNT] = {
 	[TUNING_HIGH_FREQ] = {
 		.freq_hz = 156000000,
 		.nr_voltages = 2,
-		.voltages = {ULONG_MAX, 1100},
+		.voltages = {1250, 1100},
+	},
+	[TUNING_HIGH_FREQ_HV] = {
+		.freq_hz = 156000000,
+		.nr_voltages = 2,
+		.voltages = {1390, 1250},
 	},
 };
 
@@ -212,6 +221,7 @@ struct tap_window_data {
 
 struct tegra_tuning_data {
 	unsigned int		best_tap_value;
+	unsigned int		best_hv_tap_value;
 	bool			select_partial_win;
 	bool			nominal_vcore_tuning_done;
 	bool			overide_vcore_tuning_done;
@@ -255,6 +265,8 @@ struct sdhci_tegra {
 	unsigned int tuning_bsize;
 	/* Tuning status */
 	unsigned int tuning_status;
+	unsigned int tuning_turbo_enable;
+	bool is_hv_tuning_done;
 #define TUNING_STATUS_DONE	1
 #define TUNING_STATUS_RETUNE	2
 	/* Freq tuning information for each sampling clock freq */
@@ -1097,7 +1109,8 @@ static void sdhci_tegra_dump_tuning_data(struct sdhci_host *sdhci, u8 freq_band)
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 
 	if (tegra_host->tuning_data.tap_data[0]) {
-		dev_info(mmc_dev(sdhci->mmc), "Tuning window data at 1.25V\n");
+		dev_info(mmc_dev(sdhci->mmc), "Tuning window data at %d mV\n",
+			 tuning_params[freq_band].voltages[0]);
 		pr_info("Partial window %d\n",
 			tegra_host->tuning_data.tap_data[0]->partial_win);
 		pr_info("full window start %d\n",
@@ -1106,9 +1119,11 @@ static void sdhci_tegra_dump_tuning_data(struct sdhci_host *sdhci, u8 freq_band)
 			tegra_host->tuning_data.tap_data[0]->full_win_end);
 	}
 
-	if ((freq_band == TUNING_HIGH_FREQ) &&
+	if (((freq_band == TUNING_HIGH_FREQ) |
+		(freq_band == TUNING_HIGH_FREQ_HV)) &&
 		(tegra_host->tuning_data.tap_data[1])) {
-		dev_info(mmc_dev(sdhci->mmc), "Tuning window data at 1.1V\n");
+		dev_info(mmc_dev(sdhci->mmc), "Tuning window data at %d mV\n",
+			tuning_params[freq_band].voltages[1]);
 			pr_info("partial window %d\n",
 		tegra_host->tuning_data.tap_data[1]->partial_win);
 		pr_info("full window being %d\n",
@@ -1215,12 +1230,14 @@ calculate_best_tap:
  * If there is no margin window for both cases,
  * best tap=(Y+Z')/2.
  */
-static void calculate_high_freq_tap_value(struct sdhci_host *sdhci)
+static void calculate_high_freq_tap_value(struct sdhci_host *sdhci,
+		bool hv_tuning_call)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
 	unsigned int curr_clock;
 	unsigned int max_clock;
+	unsigned int best_tap;
 	struct tap_window_data *vmax_tap_data;
 	struct tap_window_data *vmid_tap_data;
 	struct tegra_tuning_data *tuning_data;
@@ -1242,9 +1259,13 @@ static void calculate_high_freq_tap_value(struct sdhci_host *sdhci)
 		tuning_data->one_shot_tuning) {
 		dev_info(mmc_dev(sdhci->mmc),
 			"Setting best tap as 50 percent of the full window\n");
-		tuning_data->best_tap_value = (vmax_tap_data->full_win_begin +
+		best_tap = (vmax_tap_data->full_win_begin +
 			(((vmax_tap_data->full_win_end -
 			vmax_tap_data->full_win_begin) * 5) / 10));
+		if (hv_tuning_call)
+			tuning_data->best_hv_tap_value = best_tap;
+		else
+			tuning_data->best_tap_value = best_tap;
 		return;
 	}
 
@@ -1293,17 +1314,21 @@ static void calculate_high_freq_tap_value(struct sdhci_host *sdhci)
 	if ((full_win_quality <= 0) && (partial_win_quality)) {
 		dev_warn(mmc_dev(sdhci->mmc),
 			"No margin window for both windows\n");
-		tuning_data->best_tap_value = vmax_tap_data->full_win_begin +
+		best_tap = vmax_tap_data->full_win_begin +
 			vmid_tap_data->full_win_end;
-		tuning_data->best_tap_value >>= 1;
+		best_tap >>= 1;
 	} else {
 		if (full_win_quality > partial_win_quality) {
-			tuning_data->best_tap_value = full_win_tap;
+			best_tap = full_win_tap;
 		} else {
-			tuning_data->best_tap_value = partial_win_tap;
+			best_tap = partial_win_tap;
 			tuning_data->select_partial_win = true;
 		}
 	}
+	if (hv_tuning_call)
+		tuning_data->best_hv_tap_value = best_tap;
+	else
+		tuning_data->best_tap_value = best_tap;
 }
 
 static int sdhci_tegra_run_frequency_tuning(struct sdhci_host *sdhci)
@@ -1499,7 +1524,8 @@ out:
 	return err;
 }
 
-static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode)
+static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
+			bool hv_tuning_call)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
@@ -1544,21 +1570,27 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode)
 	sdhci_writel(sdhci, SDHCI_INT_DATA_AVAIL |
 		SDHCI_INT_DATA_CRC, SDHCI_INT_ENABLE);
 
-	if (sdhci->max_clk > tuning_params[TUNING_LOW_FREQ].freq_hz)
-		freq_band = TUNING_HIGH_FREQ;
-	else
+	if (sdhci->max_clk > tuning_params[TUNING_LOW_FREQ].freq_hz) {
+		if (hv_tuning_call)
+			freq_band = TUNING_HIGH_FREQ_HV;
+		else
+			freq_band = TUNING_HIGH_FREQ;
+	} else {
 		freq_band = TUNING_LOW_FREQ;
+	}
 	tuning_data = &tegra_host->tuning_data;
 
 	/*
 	 * If tuning is already done and retune request is not set, then skip
 	 * best tap value calculation and use the old best tap value.
 	 */
-	if (tegra_host->tuning_status == TUNING_STATUS_DONE) {
-		dev_info(mmc_dev(sdhci->mmc),
+	if (!hv_tuning_call) {
+		if (tegra_host->tuning_status == TUNING_STATUS_DONE) {
+			dev_info(mmc_dev(sdhci->mmc),
 			"Tuning already done. Setting tuned tap value %d\n",
 			tegra_host->tuning_data.best_tap_value);
-		goto set_best_tap;
+			goto set_best_tap;
+		}
 	}
 
 	/* Remove any previously set override voltages */
@@ -1689,15 +1721,20 @@ skip_vcore_override:
 	if (freq_band == TUNING_LOW_FREQ)
 		calculate_low_freq_tap_value(sdhci);
 	else
-		calculate_high_freq_tap_value(sdhci);
+		calculate_high_freq_tap_value(sdhci, hv_tuning_call);
 
 set_best_tap:
 
 	/* Dump the tap window data */
 	sdhci_tegra_dump_tuning_data(sdhci, freq_band);
 
-	sdhci_tegra_set_tap_delay(sdhci,
-		tegra_host->tuning_data.best_tap_value);
+	if (hv_tuning_call) {
+		sdhci_tegra_set_tap_delay(sdhci,
+			tegra_host->tuning_data.best_hv_tap_value);
+	} else {
+		sdhci_tegra_set_tap_delay(sdhci,
+			tegra_host->tuning_data.best_tap_value);
+	}
 
 	/*
 	 * Run tuning with the best tap value. If tuning fails, set the status
@@ -1709,6 +1746,10 @@ set_best_tap:
 		tuning_data->overide_vcore_tuning_done = false;
 		tegra_host->tuning_status = TUNING_STATUS_RETUNE;
 	} else {
+		if (hv_tuning_call)
+			tegra_host->is_hv_tuning_done = true;
+		else
+			tegra_host->is_hv_tuning_done = false;
 		if (tuning_data->nominal_vcore_tuning_done &&
 			tuning_data->overide_vcore_tuning_done)
 			tegra_host->tuning_status = TUNING_STATUS_DONE;
@@ -2006,6 +2047,68 @@ static int tegra_sdhci_reboot_notify(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+static ssize_t sdhci_handle_boost_mode_tap(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int tap_enable;
+	u32 present_state;
+	char *p = (char *)buf;
+	/* struct mmc_host *mmc = container_of(dev, struct mmc_host, class_dev);
+	 * struct sdhci_host *host = mmc_priv(mmc);
+	 * struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	 * struct sdhci_tegra *tegra_host = pltfm_host->priv;
+	 */
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci_host_for_sdio);
+	struct sdhci_tegra *tegra_host = pltfm_host->priv;
+	tap_enable = memparse(p, &p);
+
+	present_state = sdhci_readl(sdhci_host_for_sdio, SDHCI_PRESENT_STATE);
+	while ((present_state & (SDHCI_DOING_WRITE | SDHCI_DOING_READ))) {
+		present_state = sdhci_readl(sdhci_host_for_sdio,
+					SDHCI_PRESENT_STATE);
+	}
+
+	if (tap_enable == 1) {
+		/* set tap value which is calculated for 1.25 to 1.39 volts*/
+		tegra_host->tuning_turbo_enable = 1;
+		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
+		"Setting tap value for Voltage turbo mode\n");
+		if (tegra_host->is_hv_tuning_done) {
+			sdhci_tegra_set_tap_delay(sdhci_host_for_sdio,
+				tegra_host->tuning_data.best_hv_tap_value);
+		} else {
+			disable_irq(sdhci_host_for_sdio->irq);
+			spin_lock(&sdhci_host_for_sdio->lock);
+			sdhci_tegra_execute_tuning(sdhci_host_for_sdio,
+				MMC_SEND_TUNING_BLOCK, true);
+			spin_unlock(&sdhci_host_for_sdio->lock);
+			enable_irq(sdhci_host_for_sdio->irq);
+		}
+	} else if (tap_enable == 0) {
+		/* set tap value calculated for voltage range 1.1 to 1.25 */
+		tegra_host->tuning_turbo_enable = 0;
+		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
+			"Setting tap value for voltage non-turbo mode\n");
+		sdhci_tegra_set_tap_delay(sdhci_host_for_sdio,
+			tegra_host->tuning_data.best_tap_value);
+	} else {
+		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
+			"Wrong value 1: enable turbo mode 0: disable turbo mode\n");
+	}
+	return count;
+}
+
+static ssize_t sdhci_show_turbo_mode(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci_host_for_sdio);
+	struct sdhci_tegra *tegra_host = pltfm_host->priv;
+	return sprintf(buf, "%d\n", tegra_host->tuning_turbo_enable);
+}
+
+static DEVICE_ATTR(handle_turbo_mode, 0644, sdhci_show_turbo_mode,
+			sdhci_handle_boost_mode_tap);
+
 static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *match;
@@ -2271,6 +2374,11 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 		tegra_host->min_vcore_override_mv = plat->min_vcore_override_mv;
 
 	rc = sdhci_add_host(host);
+
+	if (tegra_host->instance == 0) {
+		device_create_file(&pdev->dev, &dev_attr_handle_turbo_mode);
+		sdhci_host_for_sdio = host;
+	}
 
 	sdhci_tegra_error_stats_debugfs(host);
 	if (rc)
