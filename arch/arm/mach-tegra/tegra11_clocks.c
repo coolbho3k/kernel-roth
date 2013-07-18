@@ -6800,6 +6800,7 @@ struct clk tegra_list_clks[] = {
 	SHARED_CLK("override.c2bus",	"override.c2bus",	NULL,	&tegra_clk_c2bus, NULL,  0, SHARED_OVERRIDE),
 	SHARED_CLK("edp.c2bus",		"edp.c2bus",		NULL,	&tegra_clk_c2bus, NULL,  0, SHARED_CEILING),
 	SHARED_CLK("cap.profile.c2bus",	"profile.c2bus",	NULL,	&tegra_clk_c2bus, NULL,  0, SHARED_CEILING),
+  SHARED_CLK("floor.profile.c2bus",	"profile.c2bus",	NULL,	&tegra_clk_c2bus, NULL,  0, 0),
 	SHARED_CLK("battery.c2bus",	"battery_edp",		"gpu",	&tegra_clk_c2bus, NULL,  0, SHARED_CEILING),
 
 	DUAL_CBUS_CLK("msenc.cbus",	"tegra_msenc",		"msenc",  &tegra_clk_c3bus, "msenc", 0, 0),
@@ -6824,6 +6825,7 @@ struct clk tegra_list_clks[] = {
 	SHARED_CLK("override.cbus", "override.cbus",	NULL,	&tegra_clk_cbus, NULL,  0, SHARED_OVERRIDE),
 	SHARED_CLK("edp.cbus",	"edp.cbus",		NULL,	&tegra_clk_cbus, NULL,  0, SHARED_CEILING),
 	SHARED_CLK("cap.profile.cbus", "profile.cbus",	NULL,	&tegra_clk_cbus, NULL,  0, SHARED_CEILING),
+  SHARED_CLK("floor.profile.cbus",	"profile.cbus",	NULL,	&tegra_clk_cbus, NULL,  0, 0),
 	SHARED_CLK("battery.cbus", "battery_edp",	"gpu",	&tegra_clk_cbus, NULL,  0, SHARED_CEILING),
 #endif
 	SHARED_CLK("nv.host1x",	"tegra_host1x",		"host1x", &tegra_clk_host1x, NULL,  0, 0),
