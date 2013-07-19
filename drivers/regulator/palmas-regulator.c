@@ -1272,6 +1272,58 @@ err:
 	return;
 }
 
+
+static ssize_t auto_smps45_ctrl_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int reg_val, ret_val;
+	long set_val;
+	struct palmas *palmas = dev_get_drvdata(dev->parent);
+	ret_val = palmas_smps_read(palmas, PALMAS_SMPS_CTRL, &reg_val);
+
+	if (ret_val < 0) {
+		dev_err(dev, "Not able to read registers\n");
+		goto out;
+	}
+
+	if (kstrtol(buf, 10, &set_val)) {
+		ret_val = -EINVAL;
+		goto out;
+	}
+
+	set_val = set_val > 0 ? 0x2 : 0;
+	reg_val = reg_val & (~PALMAS_SMPS_CTRL_SMPS45_PHASE_CTRL_MASK);
+	if (set_val) {
+		reg_val = reg_val |
+		(set_val << PALMAS_SMPS_CTRL_SMPS45_PHASE_CTRL_SHIFT);
+	}
+	ret_val = palmas_smps_write(palmas, PALMAS_SMPS_CTRL, reg_val);
+	if (ret_val < 0) {
+		dev_err(dev, "Not able to write palmas register\n");
+		goto out;
+	}
+	ret_val = count;
+out:
+	return ret_val;
+}
+
+static ssize_t auto_smps45_ctrl_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	unsigned int reg_val, ret_val;
+	struct palmas *palmas = dev_get_drvdata(dev->parent);
+	ret_val = palmas_smps_read(palmas, PALMAS_SMPS_CTRL, &reg_val);
+	if (ret_val < 0) {
+		dev_err(dev, "Not able to read palmas register");
+		return -EINVAL;
+	}
+	reg_val = (reg_val & PALMAS_SMPS_CTRL_SMPS45_PHASE_CTRL_MASK) >> PALMAS_SMPS_CTRL_SMPS45_PHASE_CTRL_SHIFT;
+	return sprintf(buf, "%d\n", reg_val);
+}
+
+DEVICE_ATTR(auto_smps45_ctrl, 0644, auto_smps45_ctrl_show, \
+						auto_smps45_ctrl_set);
+
 static __devinit int palmas_probe(struct platform_device *pdev)
 {
 	struct palmas *palmas = dev_get_drvdata(pdev->dev.parent);
@@ -1480,6 +1532,12 @@ static __devinit int palmas_probe(struct platform_device *pdev)
 					goto err_unregister_regulator;
 			}
 		}
+	}
+
+	if (device_create_file(&pdev->dev, &dev_attr_auto_smps45_ctrl)) {
+		dev_err(&pdev->dev, "failed to create sysfs\n");
+		ret = -ENOMEM;
+		goto err_unregister_regulator;
 	}
 
 	/* Check if LDO8 is in tracking mode or not */
