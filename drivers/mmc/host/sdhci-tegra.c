@@ -195,7 +195,7 @@ static struct freq_tuning_params tuning_params[TUNING_FREQ_COUNT] = {
 	[TUNING_LOW_FREQ] = {
 		.freq_hz = 82000000,
 		.nr_voltages = 1,
-		.voltages = {ULONG_MAX},
+		.voltages = {1250},
 	},
 	[TUNING_HIGH_FREQ] = {
 		.freq_hz = 156000000,
@@ -1119,7 +1119,7 @@ static void sdhci_tegra_dump_tuning_data(struct sdhci_host *sdhci, u8 freq_band)
 			tegra_host->tuning_data.tap_data[0]->full_win_end);
 	}
 
-	if (((freq_band == TUNING_HIGH_FREQ) |
+	if (((freq_band == TUNING_HIGH_FREQ) ||
 		(freq_band == TUNING_HIGH_FREQ_HV)) &&
 		(tegra_host->tuning_data.tap_data[1])) {
 		dev_info(mmc_dev(sdhci->mmc), "Tuning window data at %d mV\n",
@@ -1640,24 +1640,15 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 		voltage = tuning_params[freq_band].voltages[i];
 		if (voltage > tegra_host->nominal_vcore_mv) {
 			voltage = tegra_host->nominal_vcore_mv;
-			if (tuning_data->nominal_vcore_tuning_done) {
+			if ((tuning_data->nominal_vcore_tuning_done) &&
+			(tuning_params[freq_band].nr_voltages == 1)) {
 				spin_lock(&sdhci->lock);
 				continue;
 			}
-		}
-		if (voltage < tegra_host->min_vcore_override_mv) {
+		} else if (voltage < tegra_host->min_vcore_override_mv) {
 			voltage = tegra_host->min_vcore_override_mv;
-			/*
-			 * If nominal and min override voltages are equal, set
-			 * one shot tuning and mark min override tuning as
-			 * done.
-			 */
-			if (voltage == tegra_host->nominal_vcore_mv) {
-				tuning_data->one_shot_tuning = true;
-				tuning_data->overide_vcore_tuning_done = true;
-			}
-
-			if (tuning_data->overide_vcore_tuning_done) {
+			if ((tuning_data->overide_vcore_tuning_done) &&
+			(tuning_params[freq_band].nr_voltages == 1)) {
 				spin_lock(&sdhci->lock);
 				continue;
 			}
@@ -1693,7 +1684,7 @@ skip_vcore_override:
 		if (!vcore_override_failed) {
 			if (voltage == tegra_host->nominal_vcore_mv)
 				tuning_data->nominal_vcore_tuning_done = true;
-			else if (voltage >= tegra_host->min_vcore_override_mv)
+			if (voltage >= tegra_host->min_vcore_override_mv)
 				tuning_data->overide_vcore_tuning_done = true;
 		}
 
