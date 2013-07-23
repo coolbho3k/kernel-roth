@@ -254,6 +254,7 @@ struct sdhci_tegra {
 	bool card_present;
 	bool is_rail_enabled;
 	struct clk *emc_clk;
+	bool emc_clk_enabled;
 	unsigned int emc_max_clk;
 	struct sdhci_tegra_sd_stats *sd_stat_head;
 	unsigned int nominal_vcore_mv;
@@ -1135,6 +1136,8 @@ static void sdhci_tegra_dump_tuning_data(struct sdhci_host *sdhci, u8 freq_band)
 			tegra_host->tuning_data.select_partial_win ?
 			"partial" : "full");
 		pr_info("Best tap value %d\n",
+			tegra_host->tuning_data.best_hv_tap_value);
+		pr_info("Best tap value %d\n",
 			tegra_host->tuning_data.best_tap_value);
 }
 
@@ -1230,8 +1233,7 @@ calculate_best_tap:
  * If there is no margin window for both cases,
  * best tap=(Y+Z')/2.
  */
-static void calculate_high_freq_tap_value(struct sdhci_host *sdhci,
-		bool hv_tuning_call)
+static unsigned int calculate_high_freq_tap_value(struct sdhci_host *sdhci)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
@@ -1262,11 +1264,7 @@ static void calculate_high_freq_tap_value(struct sdhci_host *sdhci,
 		best_tap = (vmax_tap_data->full_win_begin +
 			(((vmax_tap_data->full_win_end -
 			vmax_tap_data->full_win_begin) * 5) / 10));
-		if (hv_tuning_call)
-			tuning_data->best_hv_tap_value = best_tap;
-		else
-			tuning_data->best_tap_value = best_tap;
-		return;
+		return best_tap;
 	}
 
 	curr_clock = sdhci->max_clk / 1000000;
@@ -1325,10 +1323,7 @@ static void calculate_high_freq_tap_value(struct sdhci_host *sdhci,
 			tuning_data->select_partial_win = true;
 		}
 	}
-	if (hv_tuning_call)
-		tuning_data->best_hv_tap_value = best_tap;
-	else
-		tuning_data->best_tap_value = best_tap;
+	return best_tap;
 }
 
 static int sdhci_tegra_run_frequency_tuning(struct sdhci_host *sdhci)
@@ -1524,8 +1519,7 @@ out:
 	return err;
 }
 
-static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
-			bool hv_tuning_call)
+static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhci);
 	struct sdhci_tegra *tegra_host = pltfm_host->priv;
@@ -1535,7 +1529,8 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 	u16 ctrl_2;
 	u32 ier;
 	unsigned int freq_band;
-	unsigned int i;
+	unsigned int i = 0;
+	unsigned int j = 0;
 	unsigned int voltage = 0;
 	bool vcore_override_failed = false;
 	static unsigned int vcore_lvl;
@@ -1571,10 +1566,7 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 		SDHCI_INT_DATA_CRC, SDHCI_INT_ENABLE);
 
 	if (sdhci->max_clk > tuning_params[TUNING_LOW_FREQ].freq_hz) {
-		if (hv_tuning_call)
-			freq_band = TUNING_HIGH_FREQ_HV;
-		else
-			freq_band = TUNING_HIGH_FREQ;
+		freq_band = TUNING_HIGH_FREQ;
 	} else {
 		freq_band = TUNING_LOW_FREQ;
 	}
@@ -1584,13 +1576,12 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 	 * If tuning is already done and retune request is not set, then skip
 	 * best tap value calculation and use the old best tap value.
 	 */
-	if (!hv_tuning_call) {
-		if (tegra_host->tuning_status == TUNING_STATUS_DONE) {
+	if ((tegra_host->tuning_status == TUNING_STATUS_DONE) &&
+			(tegra_host->instance != 0)) {
 			dev_info(mmc_dev(sdhci->mmc),
 			"Tuning already done. Setting tuned tap value %d\n",
 			tegra_host->tuning_data.best_tap_value);
 			goto set_best_tap;
-		}
 	}
 
 	/* Remove any previously set override voltages */
@@ -1609,6 +1600,11 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 	 * holding a lock. The spinlock needs to be released when calling
 	 * non-atomic context functions like regulator calls etc.
 	 */
+	for (j = 2 ; j >= 1; j--) {
+	if ((tegra_host->instance == 0) && (freq_band != TUNING_LOW_FREQ))
+		freq_band = j;
+	else
+		j = j-1;
 	for (i = 0; i < tuning_params[freq_band].nr_voltages; i++) {
 		spin_unlock(&sdhci->lock);
 		if (!tuning_data->tap_data[i]) {
@@ -1654,6 +1650,16 @@ static int sdhci_tegra_execute_tuning(struct sdhci_host *sdhci, u32 opcode,
 			}
 		}
 		if (voltage != vcore_lvl) {
+			/* Boost emc clock to 900MHz before setting 1.39V */
+			if ((voltage == 1390) && tegra_host->emc_clk) {
+				err = clk_prepare_enable(tegra_host->emc_clk);
+				if (err)
+					dev_err(mmc_dev(sdhci->mmc),
+					"1.39V emc freq boost failed %d\n",
+					err);
+				else
+					tegra_host->emc_clk_enabled = true;
+			}
 			err = tegra_dvfs_override_core_voltage(voltage);
 			if (err) {
 				vcore_override_failed = true;
@@ -1697,6 +1703,11 @@ skip_vcore_override:
 					err);
 		else
 			vcore_lvl = 0;
+		if (tegra_host->emc_clk_enabled) {
+			clk_disable_unprepare(tegra_host->emc_clk);
+			tegra_host->emc_clk_enabled = false;
+		}
+			
 		spin_lock(&sdhci->lock);
 	}
 
@@ -1709,23 +1720,28 @@ skip_vcore_override:
 		tegra_host->set_tuning_override = true;
 
 	/* Calculate best tap for current freq band */
-	if (freq_band == TUNING_LOW_FREQ)
+	if (freq_band == TUNING_LOW_FREQ) {
 		calculate_low_freq_tap_value(sdhci);
-	else
-		calculate_high_freq_tap_value(sdhci, hv_tuning_call);
+	} else {
+		if (freq_band == TUNING_HIGH_FREQ) {
+			tegra_host->tuning_data.best_tap_value =
+			calculate_high_freq_tap_value(sdhci);
+			goto set_best_tap;
+		}
+		else {
+			tegra_host->tuning_data.best_hv_tap_value =
+			calculate_high_freq_tap_value(sdhci);
+			goto set_best_tap;
+		}
+	}
 
 set_best_tap:
 
 	/* Dump the tap window data */
 	sdhci_tegra_dump_tuning_data(sdhci, freq_band);
-
-	if (hv_tuning_call) {
-		sdhci_tegra_set_tap_delay(sdhci,
-			tegra_host->tuning_data.best_hv_tap_value);
-	} else {
-		sdhci_tegra_set_tap_delay(sdhci,
-			tegra_host->tuning_data.best_tap_value);
 	}
+	sdhci_tegra_set_tap_delay(sdhci,
+			tegra_host->tuning_data.best_tap_value);
 
 	/*
 	 * Run tuning with the best tap value. If tuning fails, set the status
@@ -1737,10 +1753,6 @@ set_best_tap:
 		tuning_data->overide_vcore_tuning_done = false;
 		tegra_host->tuning_status = TUNING_STATUS_RETUNE;
 	} else {
-		if (hv_tuning_call)
-			tegra_host->is_hv_tuning_done = true;
-		else
-			tegra_host->is_hv_tuning_done = false;
 		if (tuning_data->nominal_vcore_tuning_done &&
 			tuning_data->overide_vcore_tuning_done)
 			tegra_host->tuning_status = TUNING_STATUS_DONE;
@@ -2064,27 +2076,26 @@ static ssize_t sdhci_handle_boost_mode_tap(struct device *dev,
 		tegra_host->tuning_turbo_enable = 1;
 		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
 		"Setting tap value for Voltage turbo mode\n");
-		if (tegra_host->is_hv_tuning_done) {
-			sdhci_tegra_set_tap_delay(sdhci_host_for_sdio,
-				tegra_host->tuning_data.best_hv_tap_value);
-		} else {
-			disable_irq(sdhci_host_for_sdio->irq);
-			spin_lock(&sdhci_host_for_sdio->lock);
-			sdhci_tegra_execute_tuning(sdhci_host_for_sdio,
-				MMC_SEND_TUNING_BLOCK, true);
-			spin_unlock(&sdhci_host_for_sdio->lock);
-			enable_irq(sdhci_host_for_sdio->irq);
-		}
+		disable_irq(sdhci_host_for_sdio->irq);
+		spin_lock(&sdhci_host_for_sdio->lock);
+		sdhci_tegra_set_tap_delay(sdhci_host_for_sdio,
+			tegra_host->tuning_data.best_hv_tap_value);
+		spin_unlock(&sdhci_host_for_sdio->lock);
+		enable_irq(sdhci_host_for_sdio->irq);
 	} else if (tap_enable == 0) {
 		/* set tap value calculated for voltage range 1.1 to 1.25 */
 		tegra_host->tuning_turbo_enable = 0;
 		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
 			"Setting tap value for voltage non-turbo mode\n");
+		disable_irq(sdhci_host_for_sdio->irq);
+		spin_lock(&sdhci_host_for_sdio->lock);
 		sdhci_tegra_set_tap_delay(sdhci_host_for_sdio,
 			tegra_host->tuning_data.best_tap_value);
+		spin_unlock(&sdhci_host_for_sdio->lock);
+		enable_irq(sdhci_host_for_sdio->irq);
 	} else {
 		dev_err(mmc_dev(sdhci_host_for_sdio->mmc),
-			"Wrong value 1: enable turbo mode 0: disable turbo mode\n");
+		"Wrong value 1: enable turbo mode 0: disable turbo mode\n");
 	}
 	return count;
 }
@@ -2307,15 +2318,14 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	if (rc != 0)
 		goto err_clk_put;
 
-	if (!strcmp(dev_name(mmc_dev(host->mmc)), "sdhci-tegra.3")) {
+	if (!strcmp(dev_name(mmc_dev(host->mmc)), "sdhci-tegra.0")) {
 		tegra_host->emc_clk = clk_get(mmc_dev(host->mmc), "emc");
 		if (IS_ERR(tegra_host->emc_clk)) {
 			dev_err(mmc_dev(host->mmc), "clk err\n");
 			rc = PTR_ERR(tegra_host->emc_clk);
 			goto err_clk_put;
-		}
-		tegra_host->emc_max_clk =
-			clk_round_rate(tegra_host->emc_clk, ULONG_MAX);
+		} else
+			clk_set_rate(tegra_host->emc_clk, 900000000);
 	}
 
 	pltfm_host->priv = tegra_host;
@@ -2364,6 +2374,7 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	if (plat->min_vcore_override_mv)
 		tegra_host->min_vcore_override_mv = plat->min_vcore_override_mv;
 
+	pr_err("nominal vcore %d, override %d\n", tegra_host->nominal_vcore_mv, tegra_host->min_vcore_override_mv);
 	rc = sdhci_add_host(host);
 
 	if (tegra_host->instance == 0) {
