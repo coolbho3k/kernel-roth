@@ -41,14 +41,7 @@ static void led_pwm_set(struct led_classdev *led_cdev,
 		container_of(led_cdev, struct led_pwm_data, cdev);
 	unsigned int max = led_dat->cdev.max_brightness;
 	unsigned int period =  led_dat->period;
-
-	if (brightness == 0) {
-		pwm_config(led_dat->pwm, 0, period);
-		pwm_disable(led_dat->pwm);
-	} else {
-		pwm_config(led_dat->pwm, brightness * period / max, period);
-		pwm_enable(led_dat->pwm);
-	}
+	pwm_config(led_dat->pwm, brightness * period / max, period);
 }
 
 static void led_pwm_enable(struct led_classdev *led_cdev,
@@ -125,6 +118,8 @@ static int led_pwm_probe(struct platform_device *pdev)
 	ret = gpio_direction_output(pdata->OE_gpio, 1);
 	if (ret)
 		pr_err("OE gpio set output failed: %d", ret);
+	pwm_enable(led_dat->pwm);
+
 	return 0;
 
 err:
