@@ -444,7 +444,7 @@ static struct tegra_edp_cpu_leakage_params leakage_params[] = {
 			 },
 		 },
 		.safety_cap = { 2958000, 2958000, 2958000, 2958000 },
-		.volt_temp_cap = { 68, 1240 },
+		.volt_temp_cap = { 78, 1350 },
 	},
 };
 
