@@ -701,7 +701,7 @@ static struct tegra_cl_dvfs_cfg_param roth_cl_dvfs_param = {
 #endif
 
 /* TPS51632: fixed 10mV steps from 600mV to 1400mV, with offset 0x23 */
-#define PMU_CPU_VDD_MAP_SIZE ((1450000 - 600000) / 10000 + 1)
+#define PMU_CPU_VDD_MAP_SIZE ((1520000 - 600000) / 10000 + 1)
 static struct voltage_reg_map pmu_cpu_vdd_map[PMU_CPU_VDD_MAP_SIZE];
 static inline void fill_reg_map(void)
 {

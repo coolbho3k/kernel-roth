@@ -26,7 +26,7 @@
 
 #define MAX_DVFS_FREQS	40
 #define MAX_DVFS_TABLES	80
-#define DVFS_RAIL_STATS_TOP_BIN	60
+#define DVFS_RAIL_STATS_TOP_BIN	80
 
 struct clk;
 struct dvfs_rail;

@@ -21,7 +21,7 @@
 
 struct tegra_cl_dvfs;
 
-#define MAX_CL_DVFS_VOLTAGES		33
+#define MAX_CL_DVFS_VOLTAGES		55
 
 enum tegra_cl_dvfs_force_mode {
 	TEGRA_CL_DVFS_FORCE_NONE = 0,
